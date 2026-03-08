@@ -42,7 +42,7 @@ export default async function OrdersPage() {
     return (
         <div className="flex flex-col gap-6">
             <div className="flex items-center justify-between">
-                <h1 className="text-3xl font-bold tracking-tight">Orders Manual Hub</h1>
+                <h1 className="text-3xl font-bold tracking-tight">Pedidos Manuales</h1>
                 <div className="flex items-center gap-2">
                     <Button variant="outline" asChild>
                         <Link href="/orders/import">
@@ -108,7 +108,9 @@ export default async function OrdersPage() {
                                         ${o.precio_venta_unidad * o.cantidad}
                                     </TableCell>
                                     <TableCell className="text-right">
-                                        <Button variant="ghost" size="sm">Editar</Button>
+                                        <Button variant="ghost" size="sm" asChild>
+                                            <Link href={`/orders/${o.id}`}>Editar</Link>
+                                        </Button>
                                     </TableCell>
                                 </TableRow>
                             ))

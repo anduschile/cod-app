@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { PlusCircle, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import Link from 'next/link'
 
 export default async function DocsPage() {
     const supabase = await createClient()
@@ -15,35 +16,39 @@ export default async function DocsPage() {
         <div className="flex flex-col gap-6">
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-3xl font-bold tracking-tight">SOP Playbook</h1>
+                    <h1 className="text-3xl font-bold tracking-tight">Manual Operativo</h1>
                     <p className="text-muted-foreground">Guías internas, checklists y procedimientos operativos.</p>
                 </div>
-                <Button>
-                    <PlusCircle className="mr-2 h-4 w-4" />
-                    Nuevo Documento
+                <Button asChild>
+                    <Link href="/docs/new">
+                        <PlusCircle className="mr-2 h-4 w-4" />
+                        Nuevo Documento
+                    </Link>
                 </Button>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {documents && documents.length > 0 ? (
                     documents.map((doc: any) => (
-                        <Card key={doc.id} className="hover:border-primary/50 cursor-pointer transition-colors">
-                            <CardHeader className="flex flex-row items-center gap-4">
-                                <FileText className="h-8 w-8 text-primary" />
-                                <div>
-                                    <CardTitle className="text-base">{doc.titulo}</CardTitle>
-                                    <CardDescription>{doc.categoria || 'Sin categoría'}</CardDescription>
-                                </div>
-                            </CardHeader>
-                            <CardContent>
-                                <p className="text-sm text-muted-foreground line-clamp-3">
-                                    {doc.contenido || 'No hay contenido para mostrar en el resumen.'}
-                                </p>
-                                <div className="mt-4 pt-4 border-t text-xs text-muted-foreground">
-                                    Actualizado: {new Date(doc.updated_at).toLocaleDateString()}
-                                </div>
-                            </CardContent>
-                        </Card>
+                        <Link key={doc.id} href={`/docs/${doc.id}`} passHref>
+                            <Card className="hover:border-primary/50 cursor-pointer transition-colors h-full flex flex-col">
+                                <CardHeader className="flex flex-row items-center gap-4">
+                                    <FileText className="h-8 w-8 text-primary" />
+                                    <div>
+                                        <CardTitle className="text-base">{doc.titulo}</CardTitle>
+                                        <CardDescription>{doc.categoria || 'Sin categoría'}</CardDescription>
+                                    </div>
+                                </CardHeader>
+                                <CardContent className="flex-1 flex flex-col justify-between">
+                                    <p className="text-sm text-muted-foreground line-clamp-3">
+                                        {doc.contenido || 'No hay contenido para mostrar en el resumen.'}
+                                    </p>
+                                    <div className="mt-4 pt-4 border-t text-xs text-muted-foreground">
+                                        Actualizado: {new Date(doc.updated_at).toLocaleDateString()}
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </Link>
                     ))
                 ) : (
                     <div className="col-span-full py-12 text-center text-muted-foreground bg-muted/20 rounded-lg border border-dashed">

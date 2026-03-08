@@ -4,6 +4,7 @@ import "./globals.css";
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
 import { AppHeader } from "@/components/app-header"
+import { Toaster } from "sonner"
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -31,6 +32,7 @@ export default function RootLayout({
             </div>
           </div>
         </SidebarProvider>
+        <Toaster position="top-right" />
       </body>
     </html>
   );

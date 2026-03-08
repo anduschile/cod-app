@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { uiTexts } from '@/lib/constants/ui-texts'
 import {
     Sidebar,
     SidebarContent,
@@ -22,32 +23,32 @@ import {
 // Menu items.
 const items = [
     {
-        title: 'Dashboard',
+        title: uiTexts.sidebar.dashboard,
         url: '/dashboard',
         icon: LayoutDashboard,
     },
     {
-        title: 'Product Lab',
+        title: uiTexts.sidebar.products,
         url: '/products',
         icon: FlaskConical,
     },
     {
-        title: 'Orders Manual Hub',
+        title: uiTexts.sidebar.orders,
         url: '/orders',
         icon: ShoppingCart,
     },
     {
-        title: 'CSV Import',
+        title: uiTexts.sidebar.import,
         url: '/orders/import',
         icon: Upload,
     },
     {
-        title: 'Costos y Ads',
+        title: uiTexts.sidebar.costs,
         url: '/costs',
         icon: DollarSign,
     },
     {
-        title: 'SOP Playbook',
+        title: uiTexts.sidebar.docs,
         url: '/docs',
         icon: BookOpen,
     },
@@ -61,7 +62,7 @@ export function AppSidebar() {
             </SidebarHeader>
             <SidebarContent>
                 <SidebarGroup>
-                    <SidebarGroupLabel>Menu Principal</SidebarGroupLabel>
+                    <SidebarGroupLabel>Menú Principal</SidebarGroupLabel>
                     <SidebarGroupContent>
                         <SidebarMenu>
                             {items.map((item) => (

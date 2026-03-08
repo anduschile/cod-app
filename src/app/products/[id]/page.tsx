@@ -2,23 +2,33 @@ import { createClient } from '@/lib/supabase/server'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { ProductEditForm } from './ProductEditForm'
+import { EvidenceHub } from './EvidenceHub'
+import { Scorecard } from './Scorecard'
 
 export default async function ProductDetailPage({
     params
 }: {
-    params: { id: string }
+    params: Promise<{ id: string }>
 }) {
     const supabase = await createClient()
+    const { id } = await params
 
     const { data: product, error } = await supabase
         .from('codpi_products')
         .select('*')
-        .eq('id', params.id)
+        .eq('id', id)
         .single()
 
     if (error || !product) {
         return <div>Producto no encontrado</div>
     }
+
+    const [{ data: evidences }, { data: allCriteria }, { data: currentScores }] = await Promise.all([
+        supabase.from('codpi_product_evidence').select('*').eq('product_id', id).order('created_at', { ascending: false }),
+        supabase.from('codpi_evaluation_criteria').select('*').eq('activo', true).order('created_at', { ascending: true }),
+        supabase.from('codpi_product_scores').select('*').eq('product_id', id)
+    ])
 
     return (
         <div className="flex flex-col gap-6">
@@ -35,8 +45,8 @@ export default async function ProductDetailPage({
             <Tabs defaultValue="detalles" className="w-full">
                 <TabsList className="grid w-full grid-cols-3 lg:w-[400px]">
                     <TabsTrigger value="detalles">Detalles Base</TabsTrigger>
-                    <TabsTrigger value="hub">Evidence Hub</TabsTrigger>
-                    <TabsTrigger value="scorecard">Scorecard</TabsTrigger>
+                    <TabsTrigger value="hub">Evidencia</TabsTrigger>
+                    <TabsTrigger value="scorecard">Matriz</TabsTrigger>
                 </TabsList>
                 <TabsContent value="detalles" className="mt-4">
                     <Card>
@@ -44,45 +54,30 @@ export default async function ProductDetailPage({
                             <CardTitle>Información Financiera y Logística</CardTitle>
                             <CardDescription>Métricas teóricas del producto</CardDescription>
                         </CardHeader>
-                        <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            <div className="flex flex-col">
-                                <span className="text-sm text-muted-foreground">Costo de Producto</span>
-                                <span className="text-lg font-medium">${product.costo_producto} {product.moneda}</span>
-                            </div>
-                            <div className="flex flex-col">
-                                <span className="text-sm text-muted-foreground">Precio Sugerido</span>
-                                <span className="text-lg font-medium">${product.precio_venta_sugerido} {product.moneda}</span>
-                            </div>
-                            <div className="flex flex-col">
-                                <span className="text-sm text-muted-foreground">Margen Bruto Teórico</span>
-                                <span className="text-lg font-medium text-green-600">
-                                    ${product.precio_venta_sugerido - product.costo_producto} {product.moneda}
-                                </span>
-                            </div>
+                        <CardContent>
+                            <ProductEditForm product={product} />
                         </CardContent>
                     </Card>
                 </TabsContent>
                 <TabsContent value="hub" className="mt-4">
                     <Card>
                         <CardHeader>
-                            <CardTitle>Evidence Hub</CardTitle>
+                            <CardTitle>Evidencia</CardTitle>
                             <CardDescription>Links, creativos y notas sobre la competencia</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            {/* Aquí irá el formulario para guardar hooks, links y capturas */}
-                            <div className="text-sm text-muted-foreground">Próximamente... Formulario de Evidencia</div>
+                            <EvidenceHub productId={product.id} evidences={evidences || []} />
                         </CardContent>
                     </Card>
                 </TabsContent>
                 <TabsContent value="scorecard" className="mt-4">
                     <Card>
                         <CardHeader>
-                            <CardTitle>Scorecard de Evaluación</CardTitle>
+                            <CardTitle>Matriz de Evaluación</CardTitle>
                             <CardDescription>Puntajes sobre dolor, wow factor, facilidad de envío, etc.</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            {/* Aquí irá la tabla de criterios y el score calculado */}
-                            <div className="text-sm text-muted-foreground">Próximamente... Scorecard dinámico</div>
+                            <Scorecard productId={product.id} allCriteria={allCriteria || []} currentScores={currentScores || []} />
                         </CardContent>
                     </Card>
                 </TabsContent>

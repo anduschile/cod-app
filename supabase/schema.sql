@@ -6,7 +6,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- ==========================================
 -- 1. TIPO DE MÚLTIPLES ESTADOS
 -- ==========================================
-CREATE TYPE order_status AS ENUM (
+CREATE TYPE codpi_order_status AS ENUM (
   'creado',
   'confirmado',
   'enviado',
@@ -18,7 +18,7 @@ CREATE TYPE order_status AS ENUM (
   'anulado'
 );
 
-CREATE TYPE product_status AS ENUM (
+CREATE TYPE codpi_product_status AS ENUM (
   'idea',
   'evaluando',
   'listo_para_test',
@@ -28,9 +28,9 @@ CREATE TYPE product_status AS ENUM (
 );
 
 -- ==========================================
--- 2. PRODUCT LAB (products)
+-- 2. PRODUCT LAB (codpi_products)
 -- ==========================================
-CREATE TABLE products (
+CREATE TABLE codpi_products (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   nombre TEXT NOT NULL,
   slug TEXT UNIQUE NOT NULL,
@@ -52,17 +52,17 @@ CREATE TABLE products (
   saturacion_competencia TEXT,
   posibilidad_upsell TEXT,
   notas TEXT,
-  estado product_status DEFAULT 'idea',
+  estado codpi_product_status DEFAULT 'idea',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- ==========================================
--- 3. EVIDENCE HUB (evidence)
+-- 3. EVIDENCE HUB (codpi_product_evidence)
 -- ==========================================
-CREATE TABLE product_evidence (
+CREATE TABLE codpi_product_evidence (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  product_id UUID REFERENCES products(id) ON DELETE CASCADE,
+  product_id UUID REFERENCES codpi_products(id) ON DELETE CASCADE,
   tipo TEXT NOT NULL, -- 'imagen', 'link_competencia', 'nota', 'hook_publicitario', 'hipotesis'
   url TEXT,
   descripcion TEXT,
@@ -73,7 +73,7 @@ CREATE TABLE product_evidence (
 -- ==========================================
 -- 4. SCORECARD (Criterios y puntajes)
 -- ==========================================
-CREATE TABLE evaluation_criteria (
+CREATE TABLE codpi_evaluation_criteria (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   nombre TEXT NOT NULL,
   descripcion TEXT,
@@ -83,10 +83,10 @@ CREATE TABLE evaluation_criteria (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
-CREATE TABLE product_scores (
+CREATE TABLE codpi_product_scores (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  product_id UUID REFERENCES products(id) ON DELETE CASCADE,
-  criteria_id UUID REFERENCES evaluation_criteria(id) ON DELETE CASCADE,
+  product_id UUID REFERENCES codpi_products(id) ON DELETE CASCADE,
+  criteria_id UUID REFERENCES codpi_evaluation_criteria(id) ON DELETE CASCADE,
   puntaje NUMERIC(5, 2) NOT NULL DEFAULT 0,
   notas TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -94,12 +94,12 @@ CREATE TABLE product_scores (
 );
 
 -- ==========================================
--- 5. ORDERS MANUAL HUB (orders)
+-- 5. ORDERS MANUAL HUB (codpi_orders)
 -- ==========================================
-CREATE TABLE orders (
+CREATE TABLE codpi_orders (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   fecha_pedido TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  product_id UUID REFERENCES products(id),
+  product_id UUID REFERENCES codpi_products(id),
   nombre_cliente TEXT,
   telefono TEXT,
   comuna TEXT,
@@ -111,7 +111,7 @@ CREATE TABLE orders (
   costo_envio NUMERIC(10, 2) DEFAULT 0,
   costo_recaudo NUMERIC(10, 2) DEFAULT 0,
   gasto_ads_asociado NUMERIC(10, 2) DEFAULT 0,
-  estado order_status DEFAULT 'creado',
+  estado codpi_order_status DEFAULT 'creado',
   tracking_number TEXT,
   carrier TEXT,
   fecha_confirmacion TIMESTAMP WITH TIME ZONE,
@@ -127,10 +127,10 @@ CREATE TABLE orders (
 -- ==========================================
 -- 6. COSTOS Y ADS (Ad Spend y Operativos)
 -- ==========================================
-CREATE TABLE ad_spend_daily (
+CREATE TABLE codpi_ad_spend_daily (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   fecha DATE NOT NULL,
-  product_id UUID REFERENCES products(id) ON DELETE RESTRICT,
+  product_id UUID REFERENCES codpi_products(id) ON DELETE RESTRICT,
   plataforma TEXT, -- Ej: 'Facebook Ads', 'TikTok Ads'
   monto NUMERIC(10, 2) NOT NULL DEFAULT 0,
   impresiones INTEGER DEFAULT 0,
@@ -140,7 +140,7 @@ CREATE TABLE ad_spend_daily (
   UNIQUE(fecha, product_id, plataforma)
 );
 
-CREATE TABLE operational_costs (
+CREATE TABLE codpi_operational_costs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   mes DATE NOT NULL, -- Para agrupar costos mensuales (ej: 2026-03-01)
   concepto TEXT NOT NULL,
@@ -150,9 +150,9 @@ CREATE TABLE operational_costs (
 );
 
 -- ==========================================
--- 7. SOP / DOCUMENTACIÓN (documents)
+-- 7. SOP / DOCUMENTACIÓN (codpi_internal_documents)
 -- ==========================================
-CREATE TABLE internal_documents (
+CREATE TABLE codpi_internal_documents (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   titulo TEXT NOT NULL,
   contenido TEXT,
@@ -163,7 +163,7 @@ CREATE TABLE internal_documents (
 );
 
 -- Triggers de updated_at para tablas clave
-CREATE OR REPLACE FUNCTION update_updated_at_column()
+CREATE OR REPLACE FUNCTION codpi_update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
    NEW.updated_at = NOW();
@@ -171,6 +171,6 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
-CREATE TRIGGER update_products_modtime BEFORE UPDATE ON products FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
-CREATE TRIGGER update_orders_modtime BEFORE UPDATE ON orders FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
-CREATE TRIGGER update_documents_modtime BEFORE UPDATE ON internal_documents FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+CREATE TRIGGER codpi_update_products_modtime BEFORE UPDATE ON codpi_products FOR EACH ROW EXECUTE PROCEDURE codpi_update_updated_at_column();
+CREATE TRIGGER codpi_update_orders_modtime BEFORE UPDATE ON codpi_orders FOR EACH ROW EXECUTE PROCEDURE codpi_update_updated_at_column();
+CREATE TRIGGER codpi_update_documents_modtime BEFORE UPDATE ON codpi_internal_documents FOR EACH ROW EXECUTE PROCEDURE codpi_update_updated_at_column();

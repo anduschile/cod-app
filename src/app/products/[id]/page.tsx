@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { ProductEditForm } from './ProductEditForm'
 import { EvidenceHub } from './EvidenceHub'
 import { Scorecard } from './Scorecard'
+import { MarketValidationPanel } from './MarketValidationPanel'
 
 export default async function ProductDetailPage({
     params
@@ -24,10 +25,12 @@ export default async function ProductDetailPage({
         return <div>Producto no encontrado</div>
     }
 
-    const [{ data: evidences }, { data: allCriteria }, { data: currentScores }] = await Promise.all([
+    const [{ data: evidences }, { data: allCriteria }, { data: currentScores }, { data: marketChecks }, { data: supplierSnapshots }] = await Promise.all([
         supabase.from('codpi_product_evidence').select('*').eq('product_id', id).order('created_at', { ascending: false }),
         supabase.from('codpi_evaluation_criteria').select('*').eq('activo', true).order('created_at', { ascending: true }),
-        supabase.from('codpi_product_scores').select('*').eq('product_id', id)
+        supabase.from('codpi_product_scores').select('*').eq('product_id', id),
+        supabase.from('codpi_product_market_checks').select('*').eq('product_id', id).order('checked_at', { ascending: false }),
+        supabase.from('codpi_product_supplier_snapshots').select('*').eq('product_id', id).order('captured_at', { ascending: false }).order('created_at', { ascending: false })
     ])
 
     return (
@@ -43,10 +46,11 @@ export default async function ProductDetailPage({
             </div>
 
             <Tabs defaultValue="detalles" className="w-full">
-                <TabsList className="grid w-full grid-cols-3 lg:w-[400px]">
+                <TabsList className="grid w-full grid-cols-4 lg:w-[500px]">
                     <TabsTrigger value="detalles">Detalles Base</TabsTrigger>
                     <TabsTrigger value="hub">Evidencia</TabsTrigger>
                     <TabsTrigger value="scorecard">Matriz</TabsTrigger>
+                    <TabsTrigger value="validacion">Validaci&oacute;n</TabsTrigger>
                 </TabsList>
                 <TabsContent value="detalles" className="mt-4">
                     <Card>
@@ -80,6 +84,13 @@ export default async function ProductDetailPage({
                             <Scorecard productId={product.id} allCriteria={allCriteria || []} currentScores={currentScores || []} />
                         </CardContent>
                     </Card>
+                </TabsContent>
+                <TabsContent value="validacion" className="mt-4">
+                    <MarketValidationPanel
+                        productId={product.id}
+                        marketChecks={marketChecks || []}
+                        supplierSnapshots={supplierSnapshots || []}
+                    />
                 </TabsContent>
             </Tabs>
         </div>

@@ -106,7 +106,10 @@ export function NewOrderForm({ products, carriers }: { products: any[], carriers
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="grid gap-2">
                             <Label>Transportadora</Label>
-                            <Select value={selectedCarrier || 'unassigned'} onValueChange={(val: string) => setSelectedCarrier(val === 'unassigned' ? '' : val)}>
+                            <Select
+                                value={selectedCarrier || 'unassigned'}
+                                onValueChange={(val) => setSelectedCarrier(!val || val === 'unassigned' ? '' : val)}
+                            >
                                 <SelectTrigger>
                                     <SelectValue placeholder="Sin asignar" />
                                 </SelectTrigger>

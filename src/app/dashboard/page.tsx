@@ -34,7 +34,11 @@ export default async function DashboardPage() {
         orders.forEach(o => {
             totalEnvio += (o.costo_envio || 0)
 
-            const productName = o.codpi_products?.nombre || 'Sin Producto'
+            const productRel = Array.isArray(o.codpi_products)
+                ? o.codpi_products[0]
+                : o.codpi_products
+
+            const productName = productRel?.nombre ?? 'Sin Producto'
             if (!rankingMap[productName]) {
                 rankingMap[productName] = { product: productName, utility: 0, count: 0 }
             }

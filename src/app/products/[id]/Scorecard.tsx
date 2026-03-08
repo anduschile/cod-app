@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Save } from "lucide-react"
+import { calculateProductScore } from "@/lib/utils/score-helper"
 
 export function Scorecard({ productId, allCriteria, currentScores }: { productId: string, allCriteria: any[], currentScores: any[] }) {
     const router = useRouter()
@@ -58,32 +59,8 @@ export function Scorecard({ productId, allCriteria, currentScores }: { productId
     }
 
     // Calcular ponderados
-    let scoreCalculado = 0
-    let scoreMaximoPosible = 0
-
-    allCriteria.forEach(c => {
-        const peso = c.peso || 1
-        scoreCalculado += (scores[c.id].puntaje * peso)
-        scoreMaximoPosible += ((c.escala_maxima || 5) * peso)
-    })
-
-    const porcentaje = scoreMaximoPosible > 0 ? (scoreCalculado / scoreMaximoPosible) * 100 : 0
-
-    let recomendacion = 'Sin Datos'
-    let colorRecomendacion = 'text-gray-500'
-
-    if (scoreMaximoPosible > 0) {
-        if (porcentaje >= 80) {
-            recomendacion = 'PROBAR'
-            colorRecomendacion = 'text-green-600 bg-green-50'
-        } else if (porcentaje >= 50) {
-            recomendacion = 'OBSERVAR'
-            colorRecomendacion = 'text-yellow-600 bg-yellow-50'
-        } else {
-            recomendacion = 'DESCARTAR'
-            colorRecomendacion = 'text-red-600 bg-red-50'
-        }
-    }
+    const scoresArray = allCriteria.map(c => ({ criteria_id: c.id, puntaje: scores[c.id].puntaje }))
+    const { scoreCalculado, scoreMaximoPosible, porcentaje, recomendacion, colorRecomendacion } = calculateProductScore(scoresArray, allCriteria)
 
     if (allCriteria.length === 0) {
         return <div className="text-sm text-muted-foreground p-4">No hay criterios de evaluación configurados en la base de datos (tabla `codpi_evaluation_criteria`). Añade algunos vía Supabase Studio para usar este Scorecard.</div>

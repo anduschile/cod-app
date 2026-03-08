@@ -11,17 +11,29 @@ import {
     TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
+import { calculateProductScore } from '@/lib/utils/score-helper'
 
 export default async function ProductsPage() {
     const supabase = await createClient()
-    const { data: products, error } = await supabase
-        .from('codpi_products')
-        .select('*')
-        .order('created_at', { ascending: false })
+    const [{ data: products, error }, { data: allCriteria }, { data: allScores }] = await Promise.all([
+        supabase.from('codpi_products').select('*').order('created_at', { ascending: false }),
+        supabase.from('codpi_evaluation_criteria').select('*').eq('activo', true),
+        supabase.from('codpi_product_scores').select('*')
+    ])
 
     if (error) {
         console.error('Error fetching products:', error)
     }
+
+    const productsWithScores = products?.map(p => {
+        const productScores = allScores?.filter(s => s.product_id === p.id) || []
+        const evalResult = calculateProductScore(productScores, allCriteria || [])
+        return { ...p, evalResult }
+    }).sort((a, b) => {
+        if (a.evalResult.hasScores && !b.evalResult.hasScores) return -1
+        if (!a.evalResult.hasScores && b.evalResult.hasScores) return 1
+        return b.evalResult.porcentaje - a.evalResult.porcentaje
+    })
 
     const getStatusColor = (status: string) => {
         switch (status) {
@@ -48,20 +60,29 @@ export default async function ProductsPage() {
             </div>
 
             <div className="rounded-md border bg-card">
+                <div className="p-3 bg-muted/30 border-b text-xs text-muted-foreground flex items-center gap-4 overflow-x-auto">
+                    <span className="font-semibold">Leyenda de Evaluación:</span>
+                    <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-green-500"></div> Probar</span>
+                    <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-yellow-500"></div> Observar</span>
+                    <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-red-500"></div> Descartar</span>
+                    <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-gray-400"></div> Sin evaluar</span>
+                </div>
                 <Table>
                     <TableHeader>
                         <TableRow>
                             <TableHead>Producto</TableHead>
                             <TableHead>Categoría</TableHead>
                             <TableHead>Estado</TableHead>
+                            <TableHead className="text-right">Puntaje</TableHead>
+                            <TableHead>Recomendación</TableHead>
                             <TableHead className="text-right">Costo Est.</TableHead>
-                            <TableHead className="text-right">Precio Sugerido</TableHead>
+                            <TableHead className="text-right">Precio Sug.</TableHead>
                             <TableHead className="text-right">Acciones</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {products && products.length > 0 ? (
-                            products.map((p: any) => (
+                        {productsWithScores && productsWithScores.length > 0 ? (
+                            productsWithScores.map((p: any) => (
                                 <TableRow key={p.id}>
                                     <TableCell className="font-medium">
                                         <Link href={`/products/${p.id}`} className="hover:underline">
@@ -72,6 +93,14 @@ export default async function ProductsPage() {
                                     <TableCell>
                                         <Badge className={`${getStatusColor(p.estado)} hover:${getStatusColor(p.estado)}`}>
                                             {p.estado.replace('_', ' ')}
+                                        </Badge>
+                                    </TableCell>
+                                    <TableCell className="text-right font-mono text-sm">
+                                        {p.evalResult.hasScores ? `${p.evalResult.porcentaje.toFixed(0)}%` : '-'}
+                                    </TableCell>
+                                    <TableCell>
+                                        <Badge variant={p.evalResult.badgeVariant as any} className={p.evalResult.colorRecomendacion}>
+                                            {p.evalResult.recomendacion}
                                         </Badge>
                                     </TableCell>
                                     <TableCell className="text-right">
@@ -89,7 +118,7 @@ export default async function ProductsPage() {
                             ))
                         ) : (
                             <TableRow>
-                                <TableCell colSpan={6} className="h-24 text-center">
+                                <TableCell colSpan={8} className="h-24 text-center">
                                     No hay productos registrados.
                                 </TableCell>
                             </TableRow>

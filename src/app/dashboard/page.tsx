@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { ArrowUpRight, ArrowDownRight, Package, DollarSign, TrendingDown, CheckCircle, Truck, Calculator } from 'lucide-react'
+import { calculateProductScore } from '@/lib/utils/score-helper'
 
 export default async function DashboardPage() {
     const supabase = await createClient()
@@ -19,6 +20,28 @@ export default async function DashboardPage() {
 
     const totalOpCosts = opCosts?.reduce((acc, c) => acc + (c.monto || 0), 0) || 0
 
+    const [
+        { data: allCriteria },
+        { data: allScores },
+        { data: allProducts }
+    ] = await Promise.all([
+        supabase.from('codpi_evaluation_criteria').select('*').eq('activo', true),
+        supabase.from('codpi_product_scores').select('*'),
+        supabase.from('codpi_products').select('id, nombre')
+    ])
+
+    let evaluatedRanking: any[] = []
+    if (allProducts && allCriteria && allScores) {
+        evaluatedRanking = allProducts.map(p => {
+            const productScores = allScores.filter(s => s.product_id === p.id)
+            const evalResult = calculateProductScore(productScores, allCriteria)
+            return {
+                nombre: p.nombre,
+                ...evalResult
+            }
+        }).filter(r => r.hasScores).sort((a, b) => b.porcentaje - a.porcentaje).slice(0, 5)
+    }
+
     let totalPedidos = 0
     let totalCobrados = 0
     let totalRechazados = 0
@@ -34,9 +57,10 @@ export default async function DashboardPage() {
         orders.forEach(o => {
             totalEnvio += (o.costo_envio || 0)
 
-            const productRel = Array.isArray(o.codpi_products)
-                ? o.codpi_products[0]
-                : o.codpi_products
+            const pData: any = o.codpi_products
+            const productRel = Array.isArray(pData)
+                ? pData[0]
+                : pData
 
             const productName = productRel?.nombre ?? 'Sin Producto'
             if (!rankingMap[productName]) {
@@ -144,7 +168,7 @@ export default async function DashboardPage() {
                 </Card>
             </div>
 
-            <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
+            <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
                 <Card className="col-span-1 border-primary/20 bg-primary/5">
                     <CardHeader>
                         <CardTitle>Ranking por Utilidad Real</CardTitle>
@@ -192,6 +216,32 @@ export default async function DashboardPage() {
                                 <span>Métricas estables.</span>
                             </div>
                         )}
+                    </CardContent>
+                </Card>
+                <Card className="col-span-1">
+                    <CardHeader>
+                        <CardTitle>Top 5 Evaluados</CardTitle>
+                        <CardDescription>Mejores puntajes (Teóricos)</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="space-y-4">
+                            {evaluatedRanking.map((p, i) => (
+                                <div key={i} className="flex items-center justify-between">
+                                    <div className="flex flex-col">
+                                        <span className="font-semibold text-sm">{i + 1}. {p.nombre}</span>
+                                        <span className={`text-[10px] font-semibold mt-0.5 w-fit px-1.5 py-0.5 rounded-md border ${p.colorRecomendacion}`}>
+                                            {p.recomendacion}
+                                        </span>
+                                    </div>
+                                    <span className="font-mono font-bold text-sm">
+                                        {p.porcentaje.toFixed(0)}%
+                                    </span>
+                                </div>
+                            ))}
+                            {evaluatedRanking.length === 0 && (
+                                <div className="text-sm text-muted-foreground text-center py-4">Aún no hay evaluación teórica</div>
+                            )}
+                        </div>
                     </CardContent>
                 </Card>
             </div>

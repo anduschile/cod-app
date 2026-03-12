@@ -8,7 +8,7 @@ export default async function DashboardPage() {
 
     const { data: orders } = await supabase
         .from('codpi_orders')
-        .select('id, estado, precio_venta_unidad, cantidad, costo_producto_unidad, costo_envio, costo_recaudo, comuna, codpi_products(nombre, comision_pasarela, costo_embalaje)')
+        .select('id, estado, precio_venta_unidad, cantidad, costo_producto_unidad, costo_envio, costo_recaudo, comuna, codpi_products(nombre, comision_pasarela, costo_embalaje, costo_producto, costo_envio_estimado, costo_recaudo_estimado)')
 
     const now = new Date()
     const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago' }).format(now)
@@ -54,32 +54,40 @@ export default async function DashboardPage() {
         orders.forEach(o => {
             const pData: any = o.codpi_products
             const product = Array.isArray(pData) ? pData[0] : pData
-
+            
             // Si el estado es "confirmado", lo contamos
             if (o.estado === 'confirmado') pedidosConfirmados++
+
+            // Lógica de cálculo estricta por pedido
+            const isNullOrUndefined = (val: any) => val === null || val === undefined;
+            const cantidad = o.cantidad || 1;
+            
+            // Prioridad: 1. Costo real guardado en pedido. 2. Costo base del producto. 3. Cero.
+            const costoProveedorUnidad = !isNullOrUndefined(o.costo_producto_unidad) ? Number(o.costo_producto_unidad) : (!isNullOrUndefined(product?.costo_producto) ? Number(product.costo_producto) : 0);
+            const costoEnvio = !isNullOrUndefined(o.costo_envio) ? Number(o.costo_envio) : (!isNullOrUndefined(product?.costo_envio_estimado) ? Number(product.costo_envio_estimado) : 0);
+            const costoCod = !isNullOrUndefined(o.costo_recaudo) ? Number(o.costo_recaudo) : (!isNullOrUndefined(product?.costo_recaudo_estimado) ? Number(product.costo_recaudo_estimado) : 0);
+            const costoEmbalaje = !isNullOrUndefined(product?.costo_embalaje) ? Number(product.costo_embalaje) : 0;
+            const comisionPasarela = !isNullOrUndefined(product?.comision_pasarela) ? Number(product.comision_pasarela) : 0;
 
             // Si el estado es "cobrado"
             if (o.estado === 'cobrado') {
                 pedidosCobrados++
-                ingresosCobrados += (o.precio_venta_unidad || 0) * (o.cantidad || 1)
-                costoMercaderiaVendida += (o.costo_producto_unidad || 0) * (o.cantidad || 1)
-                despachosTotales += (o.costo_envio || 0)
-                costoCodTotal += (o.costo_recaudo || 0) * (o.cantidad || 1)
-
-                if (product) {
-                    comisionesTotales += ((product.comision_pasarela || 0) + (product.costo_embalaje || 0)) * (o.cantidad || 1)
-                }
+                ingresosCobrados += (!isNullOrUndefined(o.precio_venta_unidad) ? Number(o.precio_venta_unidad) : 0) * cantidad;
+                costoMercaderiaVendida += costoProveedorUnidad * cantidad;
+                despachosTotales += costoEnvio; // El envio ya suele estar calculado en total
+                costoCodTotal += costoCod * cantidad;
+                comisionesTotales += (comisionPasarela + costoEmbalaje) * cantidad;
             }
 
             // Si el estado es "devuelto" o "rechazado" o "siniestro"
             if (o.estado === 'devuelto' || o.estado === 'rechazado' || o.estado === 'siniestro') {
                 pedidosDevueltos++
-                despachosTotales += (o.costo_envio || 0) // El flete se paga igual si no se entrega
+                despachosTotales += costoEnvio // El flete se paga igual si no se entrega
             }
 
             // Sumar fletes de enviados tambien, considerando que enviados ya se invirtió el dinero
             if (o.estado === 'enviado') {
-                despachosTotales += (o.costo_envio || 0)
+                despachosTotales += costoEnvio
             }
         })
     }

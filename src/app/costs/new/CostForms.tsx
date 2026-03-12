@@ -96,7 +96,7 @@ export function CostForms({ products }: { products: any[] }) {
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="grid gap-2">
                                         <Label>Fecha</Label>
-                                        <Input name="fecha" type="date" required />
+                                        <Input name="fecha" type="date" required defaultValue={new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago' }).format(new Date())} />
                                     </div>
                                     <div className="grid gap-2">
                                         <Label>Producto Asignado</Label>

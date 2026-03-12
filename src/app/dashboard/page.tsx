@@ -8,11 +8,11 @@ export default async function DashboardPage() {
 
     const { data: orders } = await supabase
         .from('codpi_orders')
-        .select('id, estado, precio_venta_unidad, cantidad, costo_producto_unidad, costo_envio, comunas, codpi_products(nombre, comision_pasarela, costo_embalaje)')
+        .select('id, estado, precio_venta_unidad, cantidad, costo_producto_unidad, costo_envio, costo_recaudo, comuna, codpi_products(nombre, comision_pasarela, costo_embalaje)')
 
     const now = new Date()
-    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-    const todayStr = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().split('T')[0]
+    const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago' }).format(now)
+    const firstDayOfMonth = `${todayStr.substring(0, 7)}-01`
 
     const [
         { data: allAds },
@@ -47,6 +47,7 @@ export default async function DashboardPage() {
     let ingresosCobrados = 0
     let costoMercaderiaVendida = 0
     let comisionesTotales = 0
+    let costoCodTotal = 0
 
     if (orders) {
         pedidosCreados = orders.length
@@ -63,6 +64,7 @@ export default async function DashboardPage() {
                 ingresosCobrados += (o.precio_venta_unidad || 0) * (o.cantidad || 1)
                 costoMercaderiaVendida += (o.costo_producto_unidad || 0) * (o.cantidad || 1)
                 despachosTotales += (o.costo_envio || 0)
+                costoCodTotal += (o.costo_recaudo || 0) * (o.cantidad || 1)
 
                 if (product) {
                     comisionesTotales += ((product.comision_pasarela || 0) + (product.costo_embalaje || 0)) * (o.cantidad || 1)
@@ -91,7 +93,7 @@ export default async function DashboardPage() {
 
     // UTILIDAD ESTIMADA
     // = Ingresos Cobrados - (Todo Ad Spend + Despachos Totales + Comisiones Totales + Costo Mercaderia Vendida (solo de los cobrados)) - Gastos fijos operativos del mes
-    const utilidadEstimada = ingresosCobrados - (gastoAdAcumulado + despachosTotales + comisionesTotales + costoMercaderiaVendida + totalOpCostsMes)
+    const utilidadEstimada = ingresosCobrados - (gastoAdAcumulado + despachosTotales + comisionesTotales + costoCodTotal + costoMercaderiaVendida + totalOpCostsMes)
 
     // Top 5 Productos (Evaluación Teórica)
     const [{ data: allCriteria }, { data: allScores }, { data: allProducts }] = await Promise.all([
@@ -175,7 +177,7 @@ export default async function DashboardPage() {
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <Card className="col-span-1 border-blue-200">
                     <CardHeader className="pb-2">
-                        <CardTitle className="text-sm text-blue-800">Pedidos Creados</CardTitle>
+                        <CardTitle className="text-sm text-blue-800">Total Pedidos (Histórico)</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <div className="text-3xl font-bold text-blue-900">{pedidosCreados}</div>
@@ -266,8 +268,8 @@ export default async function DashboardPage() {
                                 <span className="text-red-500">-${Math.round(despachosTotales).toLocaleString('es-CL')}</span>
                             </div>
                             <div className="flex justify-between border-b pb-2">
-                                <span className="text-muted-foreground">Comisiones y Embalaje</span>
-                                <span className="text-red-500">-${Math.round(comisionesTotales).toLocaleString('es-CL')}</span>
+                                <span className="text-muted-foreground">Comisiones, Embalaje y COD</span>
+                                <span className="text-red-500">-${Math.round(comisionesTotales + costoCodTotal).toLocaleString('es-CL')}</span>
                             </div>
                             <div className="flex justify-between border-b pb-2">
                                 <span className="text-muted-foreground">Costos Fijos (Mes Actual)</span>

@@ -16,8 +16,8 @@ export default async function CostsPage() {
     ])
 
     const now = new Date()
-    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-    const todayStr = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().split('T')[0]
+    const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago' }).format(now)
+    const firstDayOfMonth = `${todayStr.substring(0, 7)}-01`
 
     const [
         { data: todayAds },

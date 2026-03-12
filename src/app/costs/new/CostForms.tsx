@@ -27,10 +27,16 @@ export function CostForms({ products }: { products: any[] }) {
 
         const data = {
             fecha: formData.get('fecha'),
-            product_id: product || null,
+            product_id: product === 'global_option_999' ? null : product || null,
             plataforma: platform,
             monto: Number(formData.get('monto')),
-            cpa_plataforma: formData.get('cpa_plataforma') ? Number(formData.get('cpa_plataforma')) : null
+            campana: formData.get('campana') || null,
+            conjunto: formData.get('conjunto') || null,
+            anuncio: formData.get('anuncio') || null,
+            compras: formData.get('compras') ? Number(formData.get('compras')) : 0,
+            cpa: formData.get('cpa') ? Number(formData.get('cpa')) : null,
+            alcance: formData.get('alcance') ? Number(formData.get('alcance')) : 0,
+            observaciones: formData.get('observaciones') || null
         }
 
         const { error } = await supabase.from('codpi_ad_spend_daily').insert(data)
@@ -82,47 +88,86 @@ export function CostForms({ products }: { products: any[] }) {
                     </TabsList>
 
                     <TabsContent value="ads">
-                        <form onSubmit={submitAdSpend} className="flex flex-col gap-4 mt-4">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="grid gap-2">
-                                    <Label>Fecha</Label>
-                                    <Input name="fecha" type="date" required />
+                        <form onSubmit={submitAdSpend} className="flex flex-col gap-6 mt-4">
+
+                            {/* CAMPOS MÍNIMOS OBLIGATORIOS */}
+                            <div className="space-y-4">
+                                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Obligatorios</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="grid gap-2">
+                                        <Label>Fecha</Label>
+                                        <Input name="fecha" type="date" required />
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <Label>Producto Asignado</Label>
+                                        <Select value={product} onValueChange={(val) => setProduct(val || '')} required>
+                                            <SelectTrigger><SelectValue placeholder="Global / Marca" /></SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="global_option_999">Ninguno (Global)</SelectItem>
+                                                {products.map((p) => <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
                                 </div>
-                                <div className="grid gap-2">
-                                    <Label>Producto</Label>
-                                    <Select value={product} onValueChange={(val) => setProduct(val || '')}>
-                                        <SelectTrigger><SelectValue placeholder="Global / Marca" /></SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="global_option_999">Ninguno (Global)</SelectItem>
-                                            {products.map((p) => <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="grid gap-2">
+                                        <Label>Plataforma</Label>
+                                        <Select value={platform} onValueChange={(val) => setPlatform(val || '')} required>
+                                            <SelectTrigger><SelectValue placeholder="Selecciona..." /></SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="Facebook Ads">Facebook Ads</SelectItem>
+                                                <SelectItem value="TikTok Ads">TikTok Ads</SelectItem>
+                                                <SelectItem value="Google Ads">Google Ads</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <Label>Inversión (Monto $)</Label>
+                                        <Input name="monto" type="number" step="0.01" required />
+                                    </div>
                                 </div>
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="grid gap-2">
-                                    <Label>Plataforma</Label>
-                                    <Select value={platform} onValueChange={(val) => setPlatform(val || '')} required>
-                                        <SelectTrigger><SelectValue placeholder="Selecciona..." /></SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="Facebook Ads">Facebook Ads</SelectItem>
-                                            <SelectItem value="TikTok Ads">TikTok Ads</SelectItem>
-                                            <SelectItem value="Google Ads">Google Ads</SelectItem>
-                                        </SelectContent>
-                                    </Select>
+
+                            {/* MÉTRICAS OPCIONALES */}
+                            <div className="space-y-4 pt-4 border-t">
+                                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Métricas del Embudo (Opcional)</h3>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                    <div className="grid gap-2">
+                                        <Label>Campaña</Label>
+                                        <Input name="campana" type="text" placeholder="Nombre campaña..." />
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <Label>Conjunto</Label>
+                                        <Input name="conjunto" type="text" placeholder="Adset..." />
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <Label>Anuncio</Label>
+                                        <Input name="anuncio" type="text" placeholder="Ad name..." />
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                    <div className="grid gap-2">
+                                        <Label>Compras</Label>
+                                        <Input name="compras" type="number" step="1" placeholder="Ej: 5" />
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <Label>CPA ($)</Label>
+                                        <Input name="cpa" type="number" step="0.01" />
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <Label>Alcance</Label>
+                                        <Input name="alcance" type="number" step="1" />
+                                    </div>
                                 </div>
                                 <div className="grid gap-2">
-                                    <Label>Monto Invertido ($)</Label>
-                                    <Input name="monto" type="number" step="0.01" required />
+                                    <Label>Observaciones</Label>
+                                    <Input name="observaciones" placeholder="Ej: Día 1 testeando hook A" />
                                 </div>
                             </div>
-                            <div className="grid gap-2">
-                                <Label>CPA Promedio (Opcional)</Label>
-                                <Input name="cpa_plataforma" type="number" step="0.01" />
-                            </div>
+
                             <div className="flex justify-between mt-4">
                                 <Button type="button" variant="outline" asChild><Link href="/costs">Cancelar</Link></Button>
-                                <Button type="submit" disabled={loading}><Save className="w-4 h-4 mr-2" />Guardar</Button>
+                                <Button type="submit" disabled={loading}><Save className="w-4 h-4 mr-2" />Guardar Registro</Button>
                             </div>
                         </form>
                     </TabsContent>

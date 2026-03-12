@@ -4,16 +4,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
+import { CostActions } from './CostActions'
 
 export default async function CostsPage() {
     const supabase = await createClient()
 
-    // Ejemplo de fetch de gasto diario en general
-    const { data: adSpend } = await supabase
-        .from('codpi_ad_spend_daily')
-        .select('*, codpi_products(nombre)')
-        .order('fecha', { ascending: false })
-        .limit(30)
+    // Fetch historico
+    const [{ data: adSpend }, { data: allOpCosts }] = await Promise.all([
+        supabase.from('codpi_ad_spend_daily').select('*, codpi_products(nombre)').order('fecha', { ascending: false }).limit(100),
+        supabase.from('codpi_operational_costs').select('*').order('mes', { ascending: false }).limit(100)
+    ])
 
     const now = new Date()
     const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
@@ -21,7 +21,7 @@ export default async function CostsPage() {
 
     const [
         { data: todayAds },
-        { data: opCosts },
+        { data: opCostsMes },
         { data: orders }
     ] = await Promise.all([
         supabase.from('codpi_ad_spend_daily').select('monto').eq('fecha', todayStr),
@@ -30,13 +30,25 @@ export default async function CostsPage() {
     ])
 
     const totalAdsHoy = todayAds?.reduce((acc, a) => acc + (a.monto || 0), 0) || 0
-    const totalOpCostsMes = opCosts?.reduce((acc, c) => acc + (c.monto || 0), 0) || 0
+    const totalOpCostsMes = opCostsMes?.reduce((acc, c) => acc + (c.monto || 0), 0) || 0
 
     let totalEnvio = 0
     if (orders) {
         orders.forEach(o => totalEnvio += (o.costo_envio || 0))
     }
     const costoLogisticoPromedio = orders && orders.length > 0 ? (totalEnvio / orders.length) : 0
+
+    // Unified History
+    let unifiedHistory: any[] = []
+
+    if (adSpend) {
+        adSpend.forEach(s => unifiedHistory.push({ ...s, type: 'ad_spend', sortDate: s.fecha }))
+    }
+    if (allOpCosts) {
+        allOpCosts.forEach(c => unifiedHistory.push({ ...c, type: 'operational_cost', sortDate: c.mes }))
+    }
+
+    unifiedHistory.sort((a, b) => new Date(b.sortDate).getTime() - new Date(a.sortDate).getTime())
 
     return (
         <div className="flex flex-col gap-6">
@@ -79,38 +91,103 @@ export default async function CostsPage() {
 
             <div className="rounded-md border bg-card">
                 <div className="p-4 border-b">
-                    <h3 className="font-semibold text-lg">Registro Diario de Ads</h3>
+                    <h3 className="font-semibold text-lg">Histórico de Costos y Publicidad</h3>
                 </div>
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>Fecha</TableHead>
-                            <TableHead>Producto Asignado</TableHead>
-                            <TableHead>Plataforma</TableHead>
-                            <TableHead className="text-right">Inversión (Monto)</TableHead>
-                            <TableHead className="text-right">CPA Promedio</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {adSpend && adSpend.length > 0 ? (
-                            adSpend.map((s: any) => (
-                                <TableRow key={s.id}>
-                                    <TableCell>{s.fecha}</TableCell>
-                                    <TableCell>{s.codpi_products?.nombre || <Badge variant="outline">Global</Badge>}</TableCell>
-                                    <TableCell>{s.plataforma}</TableCell>
-                                    <TableCell className="text-right">${s.monto}</TableCell>
-                                    <TableCell className="text-right">{s.cpa_plataforma ? `$${s.cpa_plataforma}` : '-'}</TableCell>
-                                </TableRow>
-                            ))
-                        ) : (
+                <div className="overflow-x-auto">
+                    <Table className="min-w-[1100px]">
+                        <TableHeader>
                             <TableRow>
-                                <TableCell colSpan={5} className="h-24 text-center">
-                                    No hay registros de gasto diario. Carga un CSV.
-                                </TableCell>
+                                <TableHead className="w-[100px]">Fecha</TableHead>
+                                <TableHead className="w-[120px]">Tipo</TableHead>
+                                <TableHead className="w-[180px]">Producto / Concepto</TableHead>
+                                <TableHead className="w-[150px]">Plataforma</TableHead>
+                                <TableHead className="w-[180px]">Campaña / Ref.</TableHead>
+                                <TableHead className="text-right">Monto</TableHead>
+                                <TableHead className="text-right">Compras</TableHead>
+                                <TableHead className="text-right">CPA Real</TableHead>
+                                <TableHead>Obs.</TableHead>
+                                <TableHead className="text-right w-[100px]">Acciones</TableHead>
                             </TableRow>
-                        )}
-                    </TableBody>
-                </Table>
+                        </TableHeader>
+                        <TableBody>
+                            {unifiedHistory.length > 0 ? (
+                                unifiedHistory.map((item) => {
+                                    if (item.type === 'ad_spend') {
+                                        const cpaReal = item.compras && item.compras > 0 ? item.monto / item.compras : (item.cpa || null);
+                                        return (
+                                            <TableRow key={`ad-${item.id}`}>
+                                                <TableCell className="whitespace-nowrap font-medium text-sm">
+                                                    {new Date(item.fecha + 'T12:00:00Z').toLocaleDateString()}
+                                                </TableCell>
+                                                <TableCell><Badge variant="outline" className="text-blue-600 bg-blue-50 border-blue-200">Gasto Ads</Badge></TableCell>
+                                                <TableCell>
+                                                    <span className="font-medium text-sm truncate max-w-[150px]">
+                                                        {item.codpi_products?.nombre || <Badge variant="outline" className="text-xs">Global</Badge>}
+                                                    </span>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <span className="text-sm text-muted-foreground">{item.plataforma}</span>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex flex-col gap-1">
+                                                        <span className="text-sm truncate max-w-[150px]" title={item.campana}>{item.campana || '-'}</span>
+                                                        <span className="text-xs text-muted-foreground truncate max-w-[150px]" title={item.conjunto}>{item.conjunto || '-'}</span>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="text-right font-semibold">${item.monto.toLocaleString('es-CL')}</TableCell>
+                                                <TableCell className="text-right">{item.compras || '-'}</TableCell>
+                                                <TableCell className="text-right text-muted-foreground">
+                                                    {cpaReal ? `$${Math.round(cpaReal).toLocaleString('es-CL')}` : '-'}
+                                                </TableCell>
+                                                <TableCell className="text-xs truncate max-w-[150px]" title={item.observaciones}>
+                                                    {item.observaciones || ''}
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    <CostActions id={item.id} type="ad_spend" />
+                                                </TableCell>
+                                            </TableRow>
+                                        )
+                                    } else {
+                                        return (
+                                            <TableRow key={`op-${item.id}`}>
+                                                <TableCell className="whitespace-nowrap font-medium text-sm">
+                                                    {new Date(item.mes + 'T12:00:00Z').toLocaleDateString(undefined, { year: 'numeric', month: 'short' })}
+                                                </TableCell>
+                                                <TableCell><Badge variant="outline" className="text-amber-600 bg-amber-50 border-amber-200">Fijo Mensual</Badge></TableCell>
+                                                <TableCell>
+                                                    <span className="font-medium text-sm truncate max-w-[150px]">
+                                                        {item.concepto}
+                                                    </span>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <span className="text-sm text-muted-foreground">-</span>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <span className="text-sm text-muted-foreground">-</span>
+                                                </TableCell>
+                                                <TableCell className="text-right font-semibold">${item.monto.toLocaleString('es-CL')}</TableCell>
+                                                <TableCell className="text-right text-muted-foreground">-</TableCell>
+                                                <TableCell className="text-right text-muted-foreground">-</TableCell>
+                                                <TableCell className="text-xs truncate max-w-[150px]" title={item.notas}>
+                                                    {item.notas || ''}
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    <CostActions id={item.id} type="operational_cost" />
+                                                </TableCell>
+                                            </TableRow>
+                                        )
+                                    }
+                                })
+                            ) : (
+                                <TableRow>
+                                    <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
+                                        No hay registros históricos. Usa "Registrar Costo" para agregarlos manualmente.
+                                    </TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
             </div>
         </div>
     )

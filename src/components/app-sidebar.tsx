@@ -1,4 +1,7 @@
+"use client"
+
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { uiTexts } from '@/lib/constants/ui-texts'
 import {
     Sidebar,
@@ -23,7 +26,7 @@ import {
 // Menu items.
 const items = [
     {
-        title: uiTexts.sidebar.dashboard,
+        title: uiTexts.sidebar.dashboard || "Panel",
         url: '/dashboard',
         icon: LayoutDashboard,
     },
@@ -48,6 +51,11 @@ const items = [
         icon: DollarSign,
     },
     {
+        title: "Bitácora",
+        url: '/observations',
+        icon: BookOpen,
+    },
+    {
         title: uiTexts.sidebar.docs,
         url: '/docs',
         icon: BookOpen,
@@ -55,6 +63,8 @@ const items = [
 ]
 
 export function AppSidebar() {
+    const pathname = usePathname()
+
     return (
         <Sidebar>
             <SidebarHeader className="p-4">
@@ -65,16 +75,23 @@ export function AppSidebar() {
                     <SidebarGroupLabel>Menú Principal</SidebarGroupLabel>
                     <SidebarGroupContent>
                         <SidebarMenu>
-                            {items.map((item) => (
-                                <SidebarMenuItem key={item.title}>
-                                    <SidebarMenuButton asChild>
-                                        <Link href={item.url}>
-                                            <item.icon />
-                                            <span>{item.title}</span>
-                                        </Link>
-                                    </SidebarMenuButton>
-                                </SidebarMenuItem>
-                            ))}
+                            {items.map((item) => {
+                                // Evitar que /orders se active cuando estamos en /orders/import
+                                const isActive = 
+                                    pathname === item.url || 
+                                    (pathname.startsWith(item.url + '/') && item.url !== '/orders')
+
+                                return (
+                                    <SidebarMenuItem key={item.title}>
+                                        <SidebarMenuButton asChild isActive={isActive}>
+                                            <Link href={item.url}>
+                                                <item.icon />
+                                                <span>{item.title}</span>
+                                            </Link>
+                                        </SidebarMenuButton>
+                                    </SidebarMenuItem>
+                                )
+                            })}
                         </SidebarMenu>
                     </SidebarGroupContent>
                 </SidebarGroup>

@@ -1,30 +1,100 @@
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { ArrowUpRight, ArrowDownRight, Package, DollarSign, TrendingDown, CheckCircle, Truck, Calculator } from 'lucide-react'
+import { ArrowUpRight, ArrowDownRight, Package, DollarSign, TrendingDown, CheckCircle, Truck, Calculator, XCircle, RotateCcw } from 'lucide-react'
 import { calculateProductScore } from '@/lib/utils/score-helper'
 
 export default async function DashboardPage() {
     const supabase = await createClient()
 
-    const { data: orders, error: errorOrders } = await supabase
+    const { data: orders } = await supabase
         .from('codpi_orders')
-        .select('id, estado, precio_venta_unidad, cantidad, costo_producto_unidad, costo_envio, costo_recaudo, gasto_ads_asociado, codpi_products(nombre)')
+        .select('id, estado, precio_venta_unidad, cantidad, costo_producto_unidad, costo_envio, comunas, codpi_products(nombre, comision_pasarela, costo_embalaje)')
 
     const now = new Date()
     const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-
-    const { data: opCosts, error: errorOpCosts } = await supabase
-        .from('codpi_operational_costs')
-        .select('monto')
-        .gte('mes', firstDayOfMonth)
-
-    const totalOpCosts = opCosts?.reduce((acc, c) => acc + (c.monto || 0), 0) || 0
+    const todayStr = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().split('T')[0]
 
     const [
-        { data: allCriteria },
-        { data: allScores },
-        { data: allProducts }
+        { data: allAds },
+        { data: todayAds },
+        { data: opCostsMes }
     ] = await Promise.all([
+        supabase.from('codpi_ad_spend_daily').select('monto, compras'),
+        supabase.from('codpi_ad_spend_daily').select('monto').eq('fecha', todayStr),
+        supabase.from('codpi_operational_costs').select('monto').gte('mes', firstDayOfMonth)
+    ])
+
+    // Gastos fijos (Mes)
+    const totalOpCostsMes = opCostsMes?.reduce((acc, c) => acc + (c.monto || 0), 0) || 0
+
+    // Gasto Ads (Diario y Acumulado)
+    const gastoAdHoy = todayAds?.reduce((acc, a) => acc + (a.monto || 0), 0) || 0
+    let gastoAdAcumulado = 0
+    let totalComprasAds = 0
+    if (allAds) {
+        allAds.forEach(a => {
+            gastoAdAcumulado += (a.monto || 0)
+            if (a.compras) totalComprasAds += a.compras
+        })
+    }
+
+    // Pedidos Metrics
+    let pedidosCreados = 0
+    let pedidosConfirmados = 0
+    let pedidosCobrados = 0
+    let pedidosDevueltos = 0
+    let despachosTotales = 0 // Suma de todos los envios (cobrados y devueltos suelen tener costo logistico)
+    let ingresosCobrados = 0
+    let costoMercaderiaVendida = 0
+    let comisionesTotales = 0
+
+    if (orders) {
+        pedidosCreados = orders.length
+        orders.forEach(o => {
+            const pData: any = o.codpi_products
+            const product = Array.isArray(pData) ? pData[0] : pData
+
+            // Si el estado es "confirmado", lo contamos
+            if (o.estado === 'confirmado') pedidosConfirmados++
+
+            // Si el estado es "cobrado"
+            if (o.estado === 'cobrado') {
+                pedidosCobrados++
+                ingresosCobrados += (o.precio_venta_unidad || 0) * (o.cantidad || 1)
+                costoMercaderiaVendida += (o.costo_producto_unidad || 0) * (o.cantidad || 1)
+                despachosTotales += (o.costo_envio || 0)
+
+                if (product) {
+                    comisionesTotales += ((product.comision_pasarela || 0) + (product.costo_embalaje || 0)) * (o.cantidad || 1)
+                }
+            }
+
+            // Si el estado es "devuelto" o "rechazado" o "siniestro"
+            if (o.estado === 'devuelto' || o.estado === 'rechazado' || o.estado === 'siniestro') {
+                pedidosDevueltos++
+                despachosTotales += (o.costo_envio || 0) // El flete se paga igual si no se entrega
+            }
+
+            // Sumar fletes de enviados tambien, considerando que enviados ya se invirtió el dinero
+            if (o.estado === 'enviado') {
+                despachosTotales += (o.costo_envio || 0)
+            }
+        })
+    }
+
+    const cpaPromedio = (allAds && allAds.length > 0 && pedidosCreados > 0) ? (gastoAdAcumulado / pedidosCreados) : 0
+
+    // CPA basado en el campo compras si el usuario lo llenó consistentemente
+    const cpaReportado = (totalComprasAds > 0) ? (gastoAdAcumulado / totalComprasAds) : 0
+
+    const costoLogisticoPromedio = pedidosCreados > 0 ? (despachosTotales / pedidosCreados) : 0
+
+    // UTILIDAD ESTIMADA
+    // = Ingresos Cobrados - (Todo Ad Spend + Despachos Totales + Comisiones Totales + Costo Mercaderia Vendida (solo de los cobrados)) - Gastos fijos operativos del mes
+    const utilidadEstimada = ingresosCobrados - (gastoAdAcumulado + despachosTotales + comisionesTotales + costoMercaderiaVendida + totalOpCostsMes)
+
+    // Top 5 Productos (Evaluación Teórica)
+    const [{ data: allCriteria }, { data: allScores }, { data: allProducts }] = await Promise.all([
         supabase.from('codpi_evaluation_criteria').select('*').eq('activo', true),
         supabase.from('codpi_product_scores').select('*'),
         supabase.from('codpi_products').select('id, nombre')
@@ -42,186 +112,115 @@ export default async function DashboardPage() {
         }).filter(r => r.hasScores).sort((a, b) => b.porcentaje - a.porcentaje).slice(0, 5)
     }
 
-    let totalPedidos = 0
-    let totalCobrados = 0
-    let totalRechazados = 0
-    let utilidadReal = 0
-    let ingresosCobrados = 0
-    let totalEnvio = 0
-
-    const rankingMap: Record<string, { product: string, utility: number, count: number }> = {}
-
-    if (orders) {
-        totalPedidos = orders.length
-
-        orders.forEach(o => {
-            totalEnvio += (o.costo_envio || 0)
-
-            const pData: any = o.codpi_products
-            const productRel = Array.isArray(pData)
-                ? pData[0]
-                : pData
-
-            const productName = productRel?.nombre ?? 'Sin Producto'
-            if (!rankingMap[productName]) {
-                rankingMap[productName] = { product: productName, utility: 0, count: 0 }
-            }
-
-            if (o.estado === 'cobrado') {
-                totalCobrados++
-                const ingreso = (o.precio_venta_unidad || 0) * (o.cantidad || 1)
-                ingresosCobrados += ingreso
-
-                const gastos =
-                    (o.costo_producto_unidad * o.cantidad) +
-                    (o.costo_envio || 0) +
-                    (o.costo_recaudo || 0) +
-                    (o.gasto_ads_asociado || 0)
-
-                const utility = (ingreso - gastos)
-                utilidadReal += utility
-
-                rankingMap[productName].utility += utility
-                rankingMap[productName].count += 1
-            } else if (o.estado === 'rechazado') {
-                totalRechazados++
-                const loss = ((o.costo_envio || 0) + (o.gasto_ads_asociado || 0))
-                utilidadReal -= loss
-                rankingMap[productName].utility -= loss
-            } else {
-                if (o.gasto_ads_asociado) {
-                    utilidadReal -= o.gasto_ads_asociado
-                    rankingMap[productName].utility -= o.gasto_ads_asociado
-                }
-            }
-        })
-    }
-
-    // Restar también los gastos fijos a la utilidad real del mes (opcional, o mostrarlo por separado. Para purismo lo restamos del general global)
-    utilidadReal -= totalOpCosts
-
-    const tasaCobro = totalPedidos > 0 ? ((totalCobrados / totalPedidos) * 100).toFixed(1) : 0
-    const tasaRechazo = totalPedidos > 0 ? ((totalRechazados / totalPedidos) * 100).toFixed(1) : 0
-    const costoLogisticoPromedio = totalPedidos > 0 ? (totalEnvio / totalPedidos) : 0
-
-    const productRanking = Object.values(rankingMap).sort((a, b) => b.utility - a.utility).slice(0, 5)
-
     return (
         <div className="flex flex-col gap-6">
-            <h1 className="text-3xl font-bold tracking-tight">Analíticas COD</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Analíticas COD (Producción)</h1>
 
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Utilidad Neta Real</CardTitle>
+                        <CardTitle className="text-sm font-medium">Utilidad Estimada Total</CardTitle>
                         <DollarSign className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className={`text-2xl font-bold ${utilidadReal >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            ${Math.round(utilidadReal).toLocaleString('es-CL')}
+                        <div className={`text-2xl font-bold ${utilidadEstimada >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            ${Math.round(utilidadEstimada).toLocaleString('es-CL')}
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">
-                            {utilidadReal >= 0 ?
-                                <span className="text-green-600 flex items-center"><ArrowUpRight className="h-3 w-3 mr-1" /> Margen positivo</span> :
-                                <span className="text-red-600 flex items-center"><ArrowDownRight className="h-3 w-3 mr-1" /> Pérdida general</span>}
+                            Ingresos - Gastos Totales
                         </p>
                     </CardContent>
                 </Card>
 
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Tasa de Cobro</CardTitle>
-                        <CheckCircle className="h-4 w-4 text-muted-foreground" />
+                        <CardTitle className="text-sm font-medium">Gasto Ads (Hoy)</CardTitle>
+                        <TrendingDown className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{tasaCobro}%</div>
+                        <div className="text-2xl font-bold text-orange-600">${Math.round(gastoAdHoy).toLocaleString('es-CL')}</div>
                         <p className="text-xs text-muted-foreground mt-1">
-                            {totalCobrados} cobrados de {totalPedidos} envíos
+                            Total histórico: ${Math.round(gastoAdAcumulado).toLocaleString('es-CL')}
                         </p>
                     </CardContent>
                 </Card>
 
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Costo Logístico Promedio</CardTitle>
+                        <CardTitle className="text-sm font-medium">Costo por pedido creado</CardTitle>
+                        <Package className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">${Math.round(cpaPromedio).toLocaleString('es-CL')}</div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                            {totalComprasAds > 0 ? `CPA Reportado: $${Math.round(cpaReportado).toLocaleString('es-CL')}` : 'Sin compras reportadas en ads'}
+                        </p>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Logística Promedio</CardTitle>
                         <Truck className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">${Math.round(costoLogisticoPromedio).toLocaleString('es-CL')}</div>
                         <p className="text-xs text-muted-foreground mt-1">
-                            Promedio general por envío
-                        </p>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Costos Operativos (Este mes)</CardTitle>
-                        <Calculator className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold text-orange-600">${Math.round(totalOpCosts).toLocaleString('es-CL')}</div>
-                        <p className="text-xs text-muted-foreground mt-1">
-                            Impactan en la utilidad neta global
+                            Costo total de envíos ({despachosTotales > 0 ? 'Detectado' : 'Sin datos'})
                         </p>
                     </CardContent>
                 </Card>
             </div>
 
-            <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
-                <Card className="col-span-1 border-primary/20 bg-primary/5">
-                    <CardHeader>
-                        <CardTitle>Ranking por Utilidad Real</CardTitle>
-                        <CardDescription>Basado en costos de adición y restando rechazos</CardDescription>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <Card className="col-span-1 border-blue-200">
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-sm text-blue-800">Pedidos Creados</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="space-y-4">
-                            {productRanking.map((p, i) => (
-                                <div key={i} className="flex items-center justify-between">
-                                    <div className="flex flex-col">
-                                        <span className="font-semibold text-sm">{i + 1}. {p.product}</span>
-                                        <span className="text-xs text-muted-foreground">{p.count} cobrados</span>
-                                    </div>
-                                    <span className={`font-mono font-medium text-sm ${p.utility >= 0 ? "text-green-600" : "text-red-500"}`}>
-                                        ${Math.round(p.utility).toLocaleString('es-CL')}
-                                    </span>
-                                </div>
-                            ))}
-                            {productRanking.length === 0 && (
-                                <div className="text-sm text-muted-foreground text-center py-4">Sin datos suficientes</div>
-                            )}
+                        <div className="text-3xl font-bold text-blue-900">{pedidosCreados}</div>
+                    </CardContent>
+                </Card>
+                <Card className="col-span-1 border-yellow-200">
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-sm text-yellow-800">Confirmados/Enviados</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="flex items-end gap-2 text-3xl font-bold text-yellow-900">
+                            {pedidosConfirmados}
+                            {pedidosCreados > 0 && <span className="text-sm font-medium text-muted-foreground mb-1">({Math.round((pedidosConfirmados / pedidosCreados) * 100)}%)</span>}
                         </div>
                     </CardContent>
                 </Card>
-                <Card className="col-span-1">
-                    <CardHeader>
-                        <CardTitle>Alertas Activas</CardTitle>
+                <Card className="col-span-1 border-green-200 bg-green-50">
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-sm text-green-800 flex items-center gap-2"><CheckCircle className="w-4 h-4" /> Cobrados</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        {Number(tasaRechazo) > 20 && (
-                            <div className="bg-red-50 text-red-800 p-3 rounded-md text-sm mb-2 border border-red-200 flex items-center">
-                                <TrendingDown className="h-4 w-4 mr-2 flex-shrink-0" />
-                                <span><strong>Riesgo Alto:</strong> Rechazo supera 20% ({tasaRechazo}%).</span>
-                            </div>
-                        )}
-                        {utilidadReal < 0 && (
-                            <div className="bg-orange-50 text-orange-800 p-3 rounded-md text-sm border border-orange-200 flex items-center">
-                                <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
-                                <span><strong>Alerta de Capital:</strong> Tienes utilidad negativa. Evalúa detener ads o recortar fijos.</span>
-                            </div>
-                        )}
-                        {Number(tasaRechazo) <= 20 && utilidadReal >= 0 && (
-                            <div className="text-sm text-green-700 flex items-center h-full">
-                                <CheckCircle className="h-4 w-4 mr-2 flex-shrink-0" />
-                                <span>Métricas estables.</span>
-                            </div>
-                        )}
+                        <div className="flex items-end gap-2 text-3xl font-bold text-green-900">
+                            {pedidosCobrados}
+                            {pedidosCreados > 0 && <span className="text-sm font-medium text-green-700/70 mb-1">({Math.round((pedidosCobrados / pedidosCreados) * 100)}%)</span>}
+                        </div>
                     </CardContent>
                 </Card>
+                <Card className="col-span-1 border-red-200 bg-red-50">
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-sm text-red-800 flex items-center gap-2"><XCircle className="w-4 h-4" /> Devueltos/Rech.</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="flex items-end gap-2 text-3xl font-bold text-red-900">
+                            {pedidosDevueltos}
+                            {pedidosCreados > 0 && <span className="text-sm font-medium text-red-700/70 mb-1">({Math.round((pedidosDevueltos / pedidosCreados) * 100)}%)</span>}
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+
+            <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
                 <Card className="col-span-1">
                     <CardHeader>
-                        <CardTitle>Top 5 Evaluados</CardTitle>
-                        <CardDescription>Mejores puntajes (Teóricos)</CardDescription>
+                        <CardTitle>Top 5 Evaluados Teóricos</CardTitle>
+                        <CardDescription>Scorecard inicial de productos</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="space-y-4">
@@ -241,6 +240,43 @@ export default async function DashboardPage() {
                             {evaluatedRanking.length === 0 && (
                                 <div className="text-sm text-muted-foreground text-center py-4">Aún no hay evaluación teórica</div>
                             )}
+                        </div>
+                    </CardContent>
+                </Card>
+                <Card className="col-span-1">
+                    <CardHeader>
+                        <CardTitle>Desglose Analítico</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="space-y-3 text-sm">
+                            <div className="flex justify-between border-b pb-2">
+                                <span className="text-muted-foreground">Ingresos (Solo Cobrados)</span>
+                                <span className="font-semibold text-green-600">${Math.round(ingresosCobrados).toLocaleString('es-CL')}</span>
+                            </div>
+                            <div className="flex justify-between border-b pb-2">
+                                <span className="text-muted-foreground">Costo de Mercadería (CMV)</span>
+                                <span className="text-red-500">-${Math.round(costoMercaderiaVendida).toLocaleString('es-CL')}</span>
+                            </div>
+                            <div className="flex justify-between border-b pb-2">
+                                <span className="text-muted-foreground">Costo Ad Spend Total</span>
+                                <span className="text-red-500">-${Math.round(gastoAdAcumulado).toLocaleString('es-CL')}</span>
+                            </div>
+                            <div className="flex justify-between border-b pb-2">
+                                <span className="text-muted-foreground">Despachos Totales</span>
+                                <span className="text-red-500">-${Math.round(despachosTotales).toLocaleString('es-CL')}</span>
+                            </div>
+                            <div className="flex justify-between border-b pb-2">
+                                <span className="text-muted-foreground">Comisiones y Embalaje</span>
+                                <span className="text-red-500">-${Math.round(comisionesTotales).toLocaleString('es-CL')}</span>
+                            </div>
+                            <div className="flex justify-between border-b pb-2">
+                                <span className="text-muted-foreground">Costos Fijos (Mes Actual)</span>
+                                <span className="text-red-500">-${Math.round(totalOpCostsMes).toLocaleString('es-CL')}</span>
+                            </div>
+                            <div className="flex justify-between pt-2">
+                                <span className="font-bold">Utilidad Estimada Neta</span>
+                                <span className={`font-bold ${utilidadEstimada >= 0 ? 'text-green-600' : 'text-red-600'}`}>${Math.round(utilidadEstimada).toLocaleString('es-CL')}</span>
+                            </div>
                         </div>
                     </CardContent>
                 </Card>

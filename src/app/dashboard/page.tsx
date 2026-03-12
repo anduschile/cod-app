@@ -59,20 +59,29 @@ export default async function DashboardPage() {
             if (o.estado === 'confirmado') pedidosConfirmados++
 
             // Lógica de cálculo estricta por pedido
-            const isNullOrUndefined = (val: any) => val === null || val === undefined;
+            // NOTA: En `codpi_orders`, los campos numéricos vacíos se están guardando como `0` en lugar de `null`.
+            // Por lo tanto, si el valor en la orden es `0`, DEBEMOS hacer fallback al producto. Solo si
+            // el producto NO existe (es decir, fue borrado o no tiene costo) asignamos 0.
+            const isMissingOrZero = (val: any) => val === null || val === undefined || val === 0;
             const cantidad = o.cantidad || 1;
             
-            // Prioridad: 1. Costo real guardado en pedido. 2. Costo base del producto. 3. Cero.
-            const costoProveedorUnidad = !isNullOrUndefined(o.costo_producto_unidad) ? Number(o.costo_producto_unidad) : (!isNullOrUndefined(product?.costo_producto) ? Number(product.costo_producto) : 0);
-            const costoEnvio = !isNullOrUndefined(o.costo_envio) ? Number(o.costo_envio) : (!isNullOrUndefined(product?.costo_envio_estimado) ? Number(product.costo_envio_estimado) : 0);
-            const costoCod = !isNullOrUndefined(o.costo_recaudo) ? Number(o.costo_recaudo) : (!isNullOrUndefined(product?.costo_recaudo_estimado) ? Number(product.costo_recaudo_estimado) : 0);
-            const costoEmbalaje = !isNullOrUndefined(product?.costo_embalaje) ? Number(product.costo_embalaje) : 0;
-            const comisionPasarela = !isNullOrUndefined(product?.comision_pasarela) ? Number(product.comision_pasarela) : 0;
+            // Prioridad: 1. Costo real guardado en pedido (si no es 0). 2. Costo base del producto. 3. Cero.
+            const costoProveedorUnidad = !isMissingOrZero(o.costo_producto_unidad) ? Number(o.costo_producto_unidad) : (!isMissingOrZero(product?.costo_producto) ? Number(product.costo_producto) : 0);
+            const costoEnvio = !isMissingOrZero(o.costo_envio) ? Number(o.costo_envio) : (!isMissingOrZero(product?.costo_envio_estimado) ? Number(product.costo_envio_estimado) : 0);
+            
+            // EXCEPCIÓN: costo_recaudo sí puede ser 0 legítimamente si pasarela asume el gasto. 
+            // Sin embargo, en el dashboard, si fallamos a buscar el costo base, tenemos información más completa.
+            // Para proteger el dashboard de utilidades falsas, asuminos el costo base a menos que la orden afirme costo específico > 0.
+            const costoCod = !isMissingOrZero(o.costo_recaudo) ? Number(o.costo_recaudo) : (!isMissingOrZero(product?.costo_recaudo_estimado) ? Number(product.costo_recaudo_estimado) : 0);
+            
+            // Estos vienen explícitamente del producto (ya que la DB de ordenes no los tiene)
+            const costoEmbalaje = !isMissingOrZero(product?.costo_embalaje) ? Number(product.costo_embalaje) : 0;
+            const comisionPasarela = !isMissingOrZero(product?.comision_pasarela) ? Number(product.comision_pasarela) : 0;
 
             // Si el estado es "cobrado"
             if (o.estado === 'cobrado') {
                 pedidosCobrados++
-                ingresosCobrados += (!isNullOrUndefined(o.precio_venta_unidad) ? Number(o.precio_venta_unidad) : 0) * cantidad;
+                ingresosCobrados += (!isMissingOrZero(o.precio_venta_unidad) ? Number(o.precio_venta_unidad) : 0) * cantidad;
                 costoMercaderiaVendida += costoProveedorUnidad * cantidad;
                 despachosTotales += costoEnvio; // El envio ya suele estar calculado en total
                 costoCodTotal += costoCod * cantidad;

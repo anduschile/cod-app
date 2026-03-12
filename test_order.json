@@ -1,0 +1,22 @@
+[dotenv@17.3.1] injecting env (2) from .env.local -- tip: ⚙️  specify custom .env file path with { path: '/custom/path/.env' }
+[
+  {
+    "id": "7bb07aff-4e3b-4903-ad19-0d5bf0cf4be7",
+    "product_id": "9e413d59-57d9-4a89-8209-383a044990b8",
+    "estado": "cobrado",
+    "precio_venta_unidad": 7900,
+    "cantidad": 1,
+    "costo_producto_unidad": 0,
+    "costo_envio": 0,
+    "costo_recaudo": 0,
+    "codpi_products": {
+      "id": "9e413d59-57d9-4a89-8209-383a044990b8",
+      "nombre": "Picadora Electrica Dos Velocidades",
+      "costo_embalaje": 0,
+      "costo_producto": 7990,
+      "comision_pasarela": 0,
+      "costo_envio_estimado": 7500,
+      "costo_recaudo_estimado": 0
+    }
+  }
+]

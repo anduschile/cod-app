@@ -13,12 +13,45 @@ import { toast } from 'sonner'
 import { Save } from 'lucide-react'
 import Link from 'next/link'
 
-export function CostForms({ products }: { products: any[] }) {
+export function CostForms({ products, tests }: { products: any[], tests: any[] }) {
     const router = useRouter()
     const supabase = createClient()
     const [loading, setLoading] = useState(false)
+    
+    // Gasto Ads States
     const [product, setProduct] = useState('')
+    const [selectedTest, setSelectedTest] = useState('')
     const [platform, setPlatform] = useState('')
+
+    // Costo Operativo States
+    const [productOp, setProductOp] = useState('')
+    const [selectedTestOp, setSelectedTestOp] = useState('')
+    const [tipoOp, setTipoOp] = useState('fijo_mensual')
+
+    const productTests = tests.filter(t => t.product_id === product)
+    const productOpTests = tests.filter(t => t.product_id === productOp)
+
+    const handleProductChange = (val: string | null) => {
+        const value = val || ''
+        setProduct(value)
+        const productActiveTests = tests.filter(t => t.product_id === value && t.status === 'active')
+        if (productActiveTests.length === 1) {
+            setSelectedTest(productActiveTests[0].id)
+        } else {
+            setSelectedTest('')
+        }
+    }
+
+    const handleProductOpChange = (val: string | null) => {
+        const value = val || ''
+        setProductOp(value)
+        const productActiveTests = tests.filter(t => t.product_id === value && t.status === 'active')
+        if (productActiveTests.length === 1) {
+            setSelectedTestOp(productActiveTests[0].id)
+        } else {
+            setSelectedTestOp('')
+        }
+    }
 
     async function submitAdSpend(e: React.FormEvent<HTMLFormElement>) {
         e.preventDefault()
@@ -28,6 +61,7 @@ export function CostForms({ products }: { products: any[] }) {
         const data = {
             fecha: formData.get('fecha'),
             product_id: product === 'global_option_999' ? null : product || null,
+            test_id: selectedTest || null,
             plataforma: platform,
             monto: Number(formData.get('monto')),
             campana: formData.get('campana') || null,
@@ -61,6 +95,9 @@ export function CostForms({ products }: { products: any[] }) {
 
         const data = {
             mes: mesStr,
+            product_id: productOp === 'global_option_999' ? null : productOp || null,
+            test_id: selectedTestOp || null,
+            tipo: tipoOp,
             concepto: formData.get('concepto'),
             monto: Number(formData.get('monto')),
             notas: formData.get('notas')
@@ -100,16 +137,27 @@ export function CostForms({ products }: { products: any[] }) {
                                     </div>
                                     <div className="grid gap-2">
                                         <Label>Producto Asignado</Label>
-                                        <Select value={product} onValueChange={(val) => setProduct(val || '')} required>
+                                        <Select value={product} onValueChange={handleProductChange} required>
                                             <SelectTrigger><SelectValue placeholder="Global / Marca" /></SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="global_option_999">Ninguno (Global)</SelectItem>
-                                                {products.map((p) => <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>)}
+                                                {products.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>)}
                                             </SelectContent>
                                         </Select>
                                     </div>
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="grid gap-2">
+                                        <Label>Campaña / Test</Label>
+                                        <Select value={selectedTest} onValueChange={(val) => setSelectedTest(val || '')}>
+                                            <SelectTrigger><SelectValue placeholder="Opcional..." /></SelectTrigger>
+                                            <SelectContent>
+                                                {productTests.map((t: any) => (
+                                                    <SelectItem key={t.id} value={t.id}>{t.test_name} ({t.status})</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
                                     <div className="grid gap-2">
                                         <Label>Plataforma</Label>
                                         <Select value={platform} onValueChange={(val) => setPlatform(val || '')} required>
@@ -121,6 +169,8 @@ export function CostForms({ products }: { products: any[] }) {
                                             </SelectContent>
                                         </Select>
                                     </div>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="grid gap-2">
                                         <Label>Inversión (Monto $)</Label>
                                         <Input name="monto" type="number" step="0.01" required />
@@ -133,7 +183,7 @@ export function CostForms({ products }: { products: any[] }) {
                                 <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Métricas del Embudo (Opcional)</h3>
                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                     <div className="grid gap-2">
-                                        <Label>Campaña</Label>
+                                        <Label>Camp. Name (Legacy)</Label>
                                         <Input name="campana" type="text" placeholder="Nombre campaña..." />
                                     </div>
                                     <div className="grid gap-2">
@@ -180,9 +230,44 @@ export function CostForms({ products }: { products: any[] }) {
                                     <Input name="mes" type="month" required />
                                 </div>
                                 <div className="grid gap-2">
-                                    <Label>Concepto</Label>
-                                    <Input name="concepto" placeholder="Ej: Shopify, Sueldo" required />
+                                    <Label>Tipo de Costo</Label>
+                                    <Select value={tipoOp} onValueChange={(val) => setTipoOp(val || 'fijo_mensual')}>
+                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="fijo_mensual">Costo Fijo Mensual</SelectItem>
+                                            <SelectItem value="ajuste_historico">Ajuste Histórico</SelectItem>
+                                            <SelectItem value="perdida_arrastrada">Pérdida Arrastrada</SelectItem>
+                                            <SelectItem value="cierre_test">Costo Cierre Test</SelectItem>
+                                        </SelectContent>
+                                    </Select>
                                 </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="grid gap-2">
+                                    <Label>Producto (Opcional)</Label>
+                                    <Select value={productOp} onValueChange={handleProductOpChange}>
+                                        <SelectTrigger><SelectValue placeholder="Global" /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="global_option_999">Ninguno (Global)</SelectItem>
+                                            {products.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label>Campaña / Test (Opcional)</Label>
+                                    <Select value={selectedTestOp} onValueChange={(val) => setSelectedTestOp(val || '')}>
+                                        <SelectTrigger><SelectValue placeholder="Selecciona..." /></SelectTrigger>
+                                        <SelectContent>
+                                            {productOpTests.map((t: any) => (
+                                                <SelectItem key={t.id} value={t.id}>{t.test_name}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                            <div className="grid gap-2">
+                                <Label>Concepto</Label>
+                                <Input name="concepto" placeholder="Ej: Saldo negativo Dropi, Shopify, Sueldo" required />
                             </div>
                             <div className="grid gap-2">
                                 <Label>Monto ($)</Label>

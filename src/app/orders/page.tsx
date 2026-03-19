@@ -25,13 +25,15 @@ export default async function OrdersPage(props: { searchParams?: Promise<{ [key:
     const fromDate = typeof searchParams.from === 'string' ? searchParams.from : ''
     const toDate = typeof searchParams.to === 'string' ? searchParams.to : ''
     const productId = typeof searchParams.product === 'string' ? searchParams.product : ''
+    const testId = typeof searchParams.test === 'string' ? searchParams.test : ''
 
     // Base query
     let query = supabase
         .from('codpi_orders')
         .select(`
           *,
-          codpi_products ( nombre )
+          codpi_products ( nombre ),
+          codpi_tests_campaigns ( test_name )
         `)
         .order('created_at', { ascending: false })
         .limit(100)
@@ -51,10 +53,14 @@ export default async function OrdersPage(props: { searchParams?: Promise<{ [key:
     if (productId && productId !== 'todos') {
         query = query.eq('product_id', productId)
     }
+    if (testId && testId !== 'todos') {
+        query = query.eq('test_id', testId)
+    }
 
-    const [{ data: orders, error }, { data: products }] = await Promise.all([
+    const [{ data: orders }, { data: products }, { data: tests }] = await Promise.all([
         query,
-        supabase.from('codpi_products').select('id, nombre').eq('activo', true)
+        supabase.from('codpi_products').select('id, nombre').eq('activo', true),
+        supabase.from('codpi_tests_campaigns').select('id, test_name, product_id').order('test_name')
     ])
 
     const getStatusColor = (status: string) => {
@@ -102,8 +108,20 @@ export default async function OrdersPage(props: { searchParams?: Promise<{ [key:
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem value="todos">Todos los productos</SelectItem>
-                        {products?.map(p => (
+                        {products?.map((p: any) => (
                             <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+
+                <Select name="test" defaultValue={testId || 'todos'}>
+                    <SelectTrigger className="w-[180px] bg-background">
+                        <SelectValue placeholder="Campaña..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="todos">Todas las campañas</SelectItem>
+                        {tests?.map((t: any) => (
+                            <SelectItem key={t.id} value={t.id}>{t.test_name}</SelectItem>
                         ))}
                     </SelectContent>
                 </Select>
@@ -133,7 +151,7 @@ export default async function OrdersPage(props: { searchParams?: Promise<{ [key:
                 </div>
 
                 <Button type="submit" variant="secondary">Filtrar</Button>
-                {(search || (status && status !== 'todos') || (productId && productId !== 'todos') || fromDate || toDate) && (
+                {(search || (status && status !== 'todos') || (productId && productId !== 'todos') || (testId && testId !== 'todos') || fromDate || toDate) && (
                     <Button type="button" variant="ghost" asChild>
                         <Link href="/orders">Limpiar</Link>
                     </Button>
@@ -145,7 +163,7 @@ export default async function OrdersPage(props: { searchParams?: Promise<{ [key:
                     <TableHeader>
                         <TableRow>
                             <TableHead>Fecha</TableHead>
-                            <TableHead>Producto</TableHead>
+                            <TableHead>Producto / Campaña</TableHead>
                             <TableHead>Cliente / Zona</TableHead>
                             <TableHead>Estado COD</TableHead>
                             <TableHead>Tracking</TableHead>
@@ -160,7 +178,12 @@ export default async function OrdersPage(props: { searchParams?: Promise<{ [key:
                                     <TableCell className="font-medium whitespace-nowrap">
                                         {new Date(o.fecha_pedido).toLocaleDateString()}
                                     </TableCell>
-                                    <TableCell>{o.codpi_products?.nombre || 'Producto no asignado'}</TableCell>
+                                    <TableCell>
+                                        <div className="flex flex-col">
+                                            <span className="font-medium">{o.codpi_products?.nombre || 'Producto no asignado'}</span>
+                                            <span className="text-xs text-purple-700 font-semibold">{o.codpi_tests_campaigns?.test_name || '-'}</span>
+                                        </div>
+                                    </TableCell>
                                     <TableCell>
                                         <div className="flex flex-col">
                                             <span>{o.nombre_cliente}</span>
@@ -179,7 +202,7 @@ export default async function OrdersPage(props: { searchParams?: Promise<{ [key:
                                         </div>
                                     </TableCell>
                                     <TableCell className="text-right font-medium">
-                                        ${o.precio_venta_unidad * o.cantidad}
+                                        ${(o.precio_venta_unidad * o.cantidad).toLocaleString('es-CL')}
                                     </TableCell>
                                     <TableCell className="text-right">
                                         <OrderActions orderId={o.id} />

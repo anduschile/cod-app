@@ -13,12 +13,29 @@ import { toast } from 'sonner'
 import { ArrowLeft, Save } from 'lucide-react'
 import Link from 'next/link'
 
-export function NewOrderForm({ products, carriers }: { products: any[], carriers: any[] }) {
+export function NewOrderForm({ products, carriers, tests }: { products: any[], carriers: any[], tests: any[] }) {
     const router = useRouter()
     const supabase = createClient()
     const [loading, setLoading] = useState(false)
     const [selectedProduct, setSelectedProduct] = useState('')
+    const [selectedTest, setSelectedTest] = useState('')
     const [selectedCarrier, setSelectedCarrier] = useState('')
+
+    // Filtrar tests por producto seleccionado
+    const productTests = tests.filter(t => t.product_id === selectedProduct)
+    const activeTests = productTests.filter(t => t.status === 'active')
+
+    const handleProductChange = (val: string | null) => {
+        const value = val || ''
+        setSelectedProduct(value)
+        // Auto-selección: si hay un único test activo, usarlo.
+        const productActiveTests = tests.filter(t => t.product_id === value && t.status === 'active')
+        if (productActiveTests.length === 1) {
+            setSelectedTest(productActiveTests[0].id)
+        } else {
+            setSelectedTest('')
+        }
+    }
 
     async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
         e.preventDefault()
@@ -27,6 +44,7 @@ export function NewOrderForm({ products, carriers }: { products: any[], carriers
         const formData = new FormData(e.currentTarget)
         const orderData = {
             product_id: selectedProduct || null,
+            test_id: selectedTest || null,
             nombre_cliente: formData.get('nombre_cliente'),
             telefono: formData.get('telefono'),
             comuna: formData.get('comuna'),
@@ -58,7 +76,7 @@ export function NewOrderForm({ products, carriers }: { products: any[], carriers
                 <form onSubmit={onSubmit} className="flex flex-col gap-4">
                     <div className="grid gap-2">
                         <Label>Producto</Label>
-                        <Select value={selectedProduct} onValueChange={(val) => setSelectedProduct(val || '')}>
+                        <Select value={selectedProduct} onValueChange={handleProductChange}>
                             <SelectTrigger>
                                 <SelectValue placeholder="Selecciona el producto..." />
                             </SelectTrigger>
@@ -68,6 +86,25 @@ export function NewOrderForm({ products, carriers }: { products: any[], carriers
                                 ))}
                             </SelectContent>
                         </Select>
+                    </div>
+
+                    <div className="grid gap-2">
+                        <Label>Campaña / Test</Label>
+                        <Select value={selectedTest} onValueChange={(val) => setSelectedTest(val || '')}>
+                            <SelectTrigger>
+                                <SelectValue placeholder={selectedProduct ? (productTests.length > 0 ? "Selecciona campana..." : "No hay campanas para este producto") : "Selecciona primero un producto"} />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {productTests.map(t => (
+                                    <SelectItem key={t.id} value={t.id}>
+                                        {t.test_name} {t.status === 'active' ? '(Activa)' : `(${t.status})`}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        {selectedProduct && productTests.length === 0 && (
+                            <p className="text-[10px] text-muted-foreground">Este producto no tiene campañas registradas. Se guardará sin vinculación a test.</p>
+                        )}
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
